@@ -5,15 +5,15 @@ from collections import defaultdict
 from email.message import EmailMessage
 from flask import Flask, jsonify, request, send_from_directory
 
-app = Flask(__name__, static_folder="static")
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+app = Flask(__name__, static_folder=None)
 
-
-
-
-if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # Render sets PORT
-    app.run(host="0.0.0.0", port=port)
-
+def asset_dir(name):
+    # look in static/ first, then next to app.py
+    for folder in (os.path.join(BASE_DIR, "static"), BASE_DIR):
+        if os.path.isfile(os.path.join(folder, name)):
+            return folder
+    return None
 
 STORE = "ZARA WOMEN'S WEAR"
 MODEL_CANDIDATES = [os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"), "gemini-2.5-flash"]
@@ -100,7 +100,17 @@ def send_email(to, subject, body):
 
 @app.get("/")
 def home():
-    return send_from_directory("static", "index.html")
+    folder = asset_dir("index.html")
+    if folder:
+        return send_from_directory(folder, "index.html")
+    return "index.html not found in the repository.", 404
+
+@app.get("/favicon.svg")
+def favicon():
+    folder = asset_dir("favicon.svg")
+    if folder:
+        return send_from_directory(folder, "favicon.svg", mimetype="image/svg+xml")
+    return "", 404
 
 @app.get("/healthz")
 def health():
