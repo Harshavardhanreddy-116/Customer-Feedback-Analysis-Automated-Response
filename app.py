@@ -7,13 +7,8 @@ from flask import Flask, jsonify, request, send_from_directory
 
 app = Flask(__name__, static_folder="static")
 
-@app.route("/")
-def home():
-    return "Welcome to Customer Feedback Analysis!"
 
-@app.route("/")
-def ome():
-    return "Hello, Render is working!"
+
 
 if __name__ == "__main__":
     port = int(os.environ.get("PORT", 5000))  # Render sets PORT
