@@ -7,6 +7,19 @@ from flask import Flask, jsonify, request, send_from_directory
 
 app = Flask(__name__, static_folder="static")
 
+@app.route("/")
+def home():
+    return "Welcome to Customer Feedback Analysis!"
+
+@app.route("/")
+def ome():
+    return "Hello, Render is working!"
+
+if __name__ == "__main__":
+    port = int(os.environ.get("PORT", 5000))  # Render sets PORT
+    app.run(host="0.0.0.0", port=port)
+
+
 STORE = "ZARA WOMEN'S WEAR"
 MODEL_CANDIDATES = [os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"), "gemini-2.5-flash"]
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
