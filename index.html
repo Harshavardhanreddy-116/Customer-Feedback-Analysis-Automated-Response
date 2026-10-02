@@ -173,8 +173,8 @@ $('f').onsubmit = async e => {
   try {
     const res = await fetch('/api/review', {method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({rating:+rating, email, review, website:$('website').value})});
-    const d = await res.json();
-    if (!res.ok) throw new Error(d.error || 'Something went wrong.');
+    const d = await res.json().catch(() => ({}));
+    if (!res.ok) throw new Error(d.error || 'The server is busy or restarting. Please try again in a minute.');
     $('to').textContent = email; $('subj').textContent = d.subject || '';
     $('f').style.display = 'none'; $('done').style.display = 'block';
     typeOut($('body'), d.body || '');
