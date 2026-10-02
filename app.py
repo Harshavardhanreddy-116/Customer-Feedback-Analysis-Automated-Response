@@ -16,7 +16,7 @@ def asset_dir(name):
     return None
 
 STORE = "ZARA WOMEN'S WEAR"
-MODEL_CANDIDATES = [os.environ.get("GEMINI_MODEL", "gemini-2.5-flash"), "gemini-2.5-flash"]
+MODEL_CANDIDATES = [os.environ.get("GEMINI_MODEL") or "gemini-3.8-flash", "gemini-3.8-flash"]
 EMAIL_RE = re.compile(r"^[^@\s]+@[^@\s]+\.[^@\s]+$")
 
 # ---------- anti-abuse: simple in-memory limits (use Redis if you run several servers) ----------
@@ -94,7 +94,11 @@ def send_email(to, subject, body):
     msg["Subject"], msg["To"] = subject, to
     msg["From"] = os.environ.get("FROM_EMAIL", f"{STORE} <{user}>")
     msg.set_content(body)
-    port = int(os.environ.get("SMTP_PORT", "587"))
+    try:
+        port = int(os.environ.get("SMTP_PORT", "587"))
+    except ValueError:
+        app.logger.warning("SMTP_PORT is not a number, using 587. Fix the SMTP_PORT variable in Render.")
+        port = 587
     with smtplib.SMTP(host, port, timeout=20) as s:
         s.starttls(); s.login(user, pwd); s.send_message(msg)
 
