@@ -1,6 +1,6 @@
 """ZARA WOMEN'S WEAR - customer review -> AI-written email reply.
 The Gemini key and SMTP password live ONLY in environment variables (never in the browser)."""
-import os, re, time, smtplib, threading
+import os, re, time, json, smtplib, threading, urllib.request, urllib.error
 from collections import defaultdict
 from email.message import EmailMessage
 from flask import Flask, jsonify, request, send_from_directory
@@ -59,14 +59,15 @@ def draft_with_gemini(prompt):
         raise RuntimeError("no GEMINI_API_KEY")
     from google import genai
     client, last = genai.Client(api_key=key), None
-    for model in dict.fromkeys(MODEL_CANDIDATES):          # try each model, one retry each
-        for _ in range(2):
+    for model in dict.fromkeys(MODEL_CANDIDATES):
+        for wait in (0, 2, 4):                             # 503 "high demand" is temporary: retry with a pause
+            time.sleep(wait)
             try:
                 r = client.models.generate_content(model=model, contents=prompt)
                 if r.text:
                     return r.text.strip()
             except Exception as e:
-                last = e; time.sleep(1.5)
+                last = e
     raise last or RuntimeError("empty response")
 
 def offline_email(rating):                                   # fallback only if the AI is unreachable
@@ -86,7 +87,23 @@ def split_email(text):
     m = re.match(r"(?i)\s*subject:\s*(.+?)\n+(.*)", text, re.S)
     return (m.group(1).strip(), m.group(2).strip()) if m else (f"Your feedback to {STORE}", text)
 
-def send_email(to, subject, body):
+def send_via_brevo(to, subject, body):
+    """HTTPS email API: works on Render free tier (SMTP ports are blocked there)."""
+    sender = os.environ.get("BREVO_SENDER_EMAIL", "").strip()
+    if not sender:
+        raise RuntimeError("BREVO_SENDER_EMAIL not set")
+    payload = {"sender": {"name": "Customer Care Team", "email": sender},
+               "to": [{"email": to}], "subject": subject, "textContent": body}
+    req = urllib.request.Request(
+        "https://api.brevo.com/v3/smtp/email", data=json.dumps(payload).encode(),
+        headers={"api-key": os.environ["BREVO_API_KEY"], "content-type": "application/json",
+                 "accept": "application/json"}, method="POST")
+    try:
+        urllib.request.urlopen(req, timeout=15).read()
+    except urllib.error.HTTPError as e:
+        raise RuntimeError(f"Brevo {e.code}: {e.read().decode(errors='replace')[:300]}")
+
+def send_via_smtp(to, subject, body):
     host, user, pwd = os.environ.get("SMTP_HOST"), os.environ.get("SMTP_USER"), os.environ.get("SMTP_PASS")
     if not (host and user and pwd):
         raise RuntimeError("SMTP not configured")
@@ -99,8 +116,19 @@ def send_email(to, subject, body):
     except ValueError:
         app.logger.warning("SMTP_PORT is not a number, using 587. Fix the SMTP_PORT variable in Render.")
         port = 587
-    with smtplib.SMTP(host, port, timeout=20) as s:
+    with smtplib.SMTP(host, port, timeout=10) as s:
         s.starttls(); s.login(user, pwd); s.send_message(msg)
+
+def send_email(to, subject, body):
+    if os.environ.get("BREVO_API_KEY"):
+        return send_via_brevo(to, subject, body)
+    return send_via_smtp(to, subject, body)
+
+@app.errorhandler(Exception)
+def on_error(e):                                             # always answer the page in JSON, never HTML
+    app.logger.exception("Unhandled error: %s", e)
+    code = getattr(e, "code", 500)
+    return jsonify(error="Something went wrong on our side. Please try again shortly."), code if isinstance(code, int) else 500
 
 @app.get("/")
 def home():
